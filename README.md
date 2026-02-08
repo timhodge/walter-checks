@@ -62,8 +62,7 @@ RunPod Pod (GPU)
 ```bash
 cd /workspace
 git clone https://github.com/timhodge/walter-checks.git .
-chmod +x *.sh
-./start.sh
+bash start.sh
 ```
 
 `start.sh` runs setup, installs tools, and starts the LLM server. Safe to run every time — skips anything already installed.

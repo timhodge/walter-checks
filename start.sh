@@ -6,6 +6,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Ensure all scripts are executable (fresh clone won't preserve this)
+chmod +x "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/getrepo.sh 2>/dev/null || true
+
 echo ""
 echo "========================================="
 echo "  WalterChecks — Starting Up"
