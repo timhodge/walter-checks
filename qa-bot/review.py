@@ -700,6 +700,48 @@ def generate_report(mode: str, results: list[dict], profile_name: str,
 # MAIN
 # ===========================================================================
 
+def install_deps(repo: str):
+    """Run composer/npm install so tools can find project-specific extensions
+    (e.g. PHPStan WP stubs, Larastan). Vendor dirs are gitignored so they
+    don't exist after a fresh clone."""
+    composer_json = os.path.join(repo, "composer.json")
+    package_json = os.path.join(repo, "package.json")
+
+    if os.path.isfile(composer_json):
+        vendor_dir = os.path.join(repo, "vendor")
+        # Check composer.json for custom vendor-dir config
+        try:
+            with open(composer_json) as f:
+                data = json.load(f)
+            custom_vendor = data.get("config", {}).get("vendor-dir")
+            if custom_vendor:
+                vendor_dir = os.path.join(repo, custom_vendor)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+        if not os.path.isdir(vendor_dir):
+            console.print("  [dim]composer install (vendor not found)...[/dim]")
+            r = subprocess.run(
+                ["composer", "install", "--no-interaction", "--no-scripts", "--quiet"],
+                cwd=repo, capture_output=True, text=True, timeout=120)
+            if r.returncode == 0:
+                console.print("  [green]✓[/green] composer install complete")
+            else:
+                console.print(f"  [yellow]⚠[/yellow] composer install failed: {r.stderr[:200]}")
+
+    if os.path.isfile(package_json):
+        node_modules = os.path.join(repo, "node_modules")
+        if not os.path.isdir(node_modules):
+            console.print("  [dim]npm install (node_modules not found)...[/dim]")
+            r = subprocess.run(
+                ["npm", "install", "--no-audit", "--no-fund", "--quiet"],
+                cwd=repo, capture_output=True, text=True, timeout=180)
+            if r.returncode == 0:
+                console.print("  [green]✓[/green] npm install complete")
+            else:
+                console.print(f"  [yellow]⚠[/yellow] npm install failed: {r.stderr[:200]}")
+
+
 def run_tools(repo: str, profile_name: str, phpstan_level: int, skip: bool):
     if skip:
         console.print("\n[dim]Skipping static analysis (--no-tools)[/dim]")
@@ -855,6 +897,10 @@ Examples (from repo root):
             console.print(f"\n[yellow]Warning:[/yellow] Prior report not found: {prior_report_path}")
     elif hasattr(args, 'latest') and args.latest:
         console.print(f"\n[yellow]Warning:[/yellow] No previous reports found for this repo")
+
+    # ---- Install dependencies (vendor/, node_modules/) ----
+    if not args.no_tools:
+        install_deps(repo_root)
 
     # ---- Static analysis ----
     # Tools run from repo_root where config files (phpstan.neon, .phpcs.xml.dist) live

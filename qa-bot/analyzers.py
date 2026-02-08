@@ -197,8 +197,20 @@ def run_phpstan(repo: str, level: int = 5) -> AnalyzerResult:
     else:
         cmd.extend(_php_dirs(repo))
     code, stdout, stderr = _run(cmd, repo)
+
+    # PHPStan exits non-zero when it has findings (code 1) — that's normal.
+    # But if there's no JSON output, something went wrong (config error, missing extension, etc.)
+    if not stdout or not stdout.strip().startswith("{"):
+        # No JSON output — PHPStan itself errored
+        error_msg = stderr or stdout or "Unknown error"
+        # Truncate but show enough to diagnose
+        error_msg = error_msg.strip()[:500]
+        return AnalyzerResult(tool=name, success=False, findings_count=0,
+                              output=error_msg,
+                              error=f"PHPStan error (check config): {error_msg[:100]}")
+
     try:
-        data = json.loads(stdout) if stdout else {}
+        data = json.loads(stdout)
         totals = data.get("totals", {})
         n = totals.get("file_errors", 0) + totals.get("errors", 0)
 
@@ -246,8 +258,9 @@ def run_phpstan(repo: str, level: int = 5) -> AnalyzerResult:
                               output=output or "No issues found.",
                               summary=f"{n} issue(s) at level {level}/9 ({len(error_types)} unique error types).")
     except (json.JSONDecodeError, KeyError):
-        return AnalyzerResult(tool=name, success=True, findings_count=0,
-                              output=stdout or stderr, error="Parse error")
+        return AnalyzerResult(tool=name, success=False, findings_count=0,
+                              output=stdout or stderr,
+                              error="PHPStan returned invalid JSON")
 
 
 def run_psalm(repo: str) -> AnalyzerResult:
