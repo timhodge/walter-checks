@@ -14,13 +14,14 @@
 
 _REPORT_PREAMBLE = """CRITICAL RULES — follow these strictly:
 - ONLY report issues you ACTUALLY FIND in the code below
-- Every finding MUST cite a specific file path, line number, and quote the problematic code
-- Do NOT write "Not applicable", "None identified", "No issues found in this category", or similar
+- Every finding MUST quote the specific problematic code. If you cannot quote a line that is WRONG, do not generate the finding.
+- Do NOT flag code that is already doing the right thing. For example, a query using $wpdb->prepare() is NOT SQL injection.
+- Do NOT report plugin-wide or project-wide concerns (missing uninstall.php, missing activation hooks, etc.) unless you see direct evidence in the code shown. These are architecture issues, not file-level findings.
+- Do NOT list every line number in a file. Each finding must point to ONE specific location with ONE specific problem.
 - Do NOT fill out a checklist — skip any category that has no real findings
-- If a file has zero issues, just say "No issues found." and stop — do NOT list what you checked
+- If a file has zero issues, just say "No issues found." and stop
 - Silence on a topic means the code is clean. Do NOT explain why something is not a problem.
-- 3 real findings with line numbers are worth more than 30 generic observations
-- Do NOT speculate about code you cannot see. Only review what is shown to you.
+- 3 real findings with quoted code are worth more than 30 generic observations
 
 """
 
