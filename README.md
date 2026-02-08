@@ -80,6 +80,18 @@ Otherwise specify: `--profile wordpress`
 
 Report saves to `reports/`.
 
+### 5. Use the Report
+
+Copy the report into your project's `wc-reports/` directory:
+
+```bash
+# From your local machine
+scp runpod:/workspace/reports/my-plugin-repo-wordpress-20260208.md \
+    ~/projects/my-plugin/wc-reports/
+```
+
+The `wc-reports/` folder is the convention for storing WalterChecks reports inside each project. Your coding agent (Claude Code, etc.) reads from this directory to find actionable findings. Add `wc-reports/` to `.gitignore` — reports are working artifacts, not source code.
+
 ## On Subsequent Pods
 
 Network volume keeps the repo, model, tools, and credentials. On a new pod:
