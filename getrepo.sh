@@ -1,5 +1,5 @@
 #!/bin/bash
-# getrepo.sh — Clone a GitHub repo into /workspace/repos/
+# getrepo.sh — Clone a GitHub repo into repos/
 # If already cloned, pulls latest instead.
 #
 # Usage:

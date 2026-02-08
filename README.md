@@ -8,16 +8,23 @@ Self-hosted code review on RunPod GPU instances. Combines 11 static analysis too
 
 ```
 RunPod Pod (GPU)
-├── Network Volume (/workspace)
-│   ├── models/              ← Model weights (persist across pods)
-│   ├── .composer/           ← PHP tools (persist across pods)
-│   ├── .npm-global/         ← JS tools (persist across pods)
-│   ├── .git-credentials     ← GitHub PAT (persist across pods)
-│   ├── .waltercheck-env     ← PATH config (auto-generated)
-│   ├── qa-bot/              ← Scripts + prompts
-│   └── repos/               ← Cloned repos to review
-├── vLLM Server              ← Serves model as OpenAI-compatible API
-└── review.py                ← Runs tools, sends to model, generates report
+└── Network Volume (/workspace)
+    ├── start.sh                ← Single entry point
+    ├── getrepo.sh              ← Clone repos for review
+    ├── setup.sh                ← Python deps, PHP, model download
+    ├── setup_tools.sh          ← Static analysis tool installation
+    ├── serve.sh                ← Starts vLLM server
+    ├── qa-bot/
+    │   ├── review.py           ← Runs tools, sends to model, generates report
+    │   ├── analyzers.py        ← Static analysis tool runners
+    │   ├── prompts.py          ← LLM review profiles and system prompts
+    │   └── test_connection.py
+    ├── models/                 ← Model weights (persist across pods)
+    ├── repos/                  ← Cloned repos to review
+    ├── reports/                ← Generated review reports
+    ├── .composer/              ← PHP tools (persist across pods)
+    ├── .npm-global/            ← JS tools (persist across pods)
+    └── .git-credentials        ← GitHub PAT (persist across pods)
 ```
 
 ## Quick Start
@@ -31,42 +38,35 @@ RunPod Pod (GPU)
 - Template: RunPod PyTorch (any CUDA-enabled template)
 - Attach your network volume → mounts at `/workspace`
 
-### 3. First-Time Setup (~5-10 min)
+### 3. Clone and Start
 ```bash
-cd /workspace/qa-bot
-chmod +x setup.sh setup_tools.sh serve.sh
-./setup.sh          # Python deps, PHP 8.4, model download
-./setup_tools.sh    # Static analysis tools
+cd /workspace
+git clone https://github.com/timhodge/walter-checks.git .
+chmod +x *.sh
+./start.sh
 ```
 
-### 4. Start the Model Server
-```bash
-./serve.sh
-```
+`start.sh` runs setup, installs tools, and starts the LLM server. Safe to run every time — skips anything already installed.
+
 Wait for "Application startup complete" — usually 1-2 minutes.
 
-### 5. Run a Review
+### 4. Run a Review
 In a second terminal:
 ```bash
-cd /workspace/repos
-git clone https://github.com/your-org/your-repo.git
-
-cd /workspace/qa-bot
-python review.py repo /workspace/repos/your-repo
+./getrepo.sh your-org/your-repo
+python qa-bot/review.py repo repos/your-repo
 ```
 If the repo has a `WalterChecks.json`, profile/root/excludes are automatic.
 Otherwise specify: `--profile wordpress`
 
-Report saves to `/workspace/qa-bot/reports/`.
+Report saves to `reports/`.
 
 ## On Subsequent Pods
 
-Network volume keeps model, tools, and credentials. On a new pod:
+Network volume keeps the repo, model, tools, and credentials. On a new pod:
 ```bash
-cd /workspace/qa-bot
-./setup.sh              # Reinstalls Python deps (skips model download)
-./setup_tools.sh        # Checks tools, installs any missing
-./serve.sh              # Start the LLM server
+cd /workspace
+./start.sh    # Reinstalls Python deps, checks tools, starts server
 ```
 
 ## WalterChecks.json
@@ -120,19 +120,19 @@ git config --global credential.helper 'store --file=/workspace/.git-credentials'
 
 ```bash
 # Full repository scan
-python review.py repo /workspace/repos/my-site --profile wordpress
+python qa-bot/review.py repo repos/my-site --profile wordpress
 
 # PR review (changed files only)
-python review.py pr /workspace/repos/my-site --branch feature/new-header
+python qa-bot/review.py pr repos/my-site --branch feature/new-header
 
 # Tools only — no GPU needed
-python review.py repo /workspace/repos/my-site --profile security --tools-only
+python qa-bot/review.py repo repos/my-site --profile security --tools-only
 
 # LLM only — skip static analysis
-python review.py repo /workspace/repos/my-site --profile wordpress --no-tools
+python qa-bot/review.py repo repos/my-site --profile wordpress --no-tools
 
 # Follow-up review (after fixes)
-python review.py repo /workspace/repos/my-site --prior-report reports/previous.md
+python qa-bot/review.py repo repos/my-site --prior-report reports/previous.md
 ```
 
 ## Static Analysis Tools (11)
@@ -155,14 +155,14 @@ python review.py repo /workspace/repos/my-site --prior-report reports/previous.m
 
 | GPU | VRAM | $/hr | Architecture | Status |
 |-----|------|------|--------------|--------|
-| **RTX 4090** | 24GB | $0.59 | Ada | ✓ Best pick — fast, cheap, always available |
-| A40 | 48GB | $0.40 | Ampere | ✓ Cheapest (low availability) |
-| L40S | 48GB | $0.86 | Ada | ✓ Works great |
-| RTX 6000 Ada | 48GB | $0.77 | Ada | ✓ Works great |
-| A100 SXM | 80GB | $1.39 | Ampere | ✓ Works but AWQ is slow on Ampere |
-| RTX 5090 | 32GB | — | Blackwell | ✗ vLLM not compatible |
-| RTX PRO 4500 | 32GB | $0.54 | Blackwell | ✗ Despite the name, it's Blackwell |
-| RTX PRO 6000 | 96GB | $1.69 | Blackwell | ✗ vLLM not compatible |
+| **RTX 4090** | 24GB | $0.59 | Ada | Best pick — fast, cheap, always available |
+| A40 | 48GB | $0.40 | Ampere | Cheapest (low availability) |
+| L40S | 48GB | $0.86 | Ada | Works great |
+| RTX 6000 Ada | 48GB | $0.77 | Ada | Works great |
+| A100 SXM | 80GB | $1.39 | Ampere | Works but AWQ is slow on Ampere |
+| RTX 5090 | 32GB | — | Blackwell | vLLM not compatible |
+| RTX PRO 4500 | 32GB | $0.54 | Blackwell | Despite the name, it's Blackwell |
+| RTX PRO 6000 | 96GB | $1.69 | Blackwell | vLLM not compatible |
 
 **Rule of thumb:** If it says "Blackwell", "RTX 50xx", or "RTX PRO" — don't use it until vLLM ships Blackwell support.
 
@@ -186,13 +186,13 @@ Plus ~$3.50/mo for 50GB network volume storage.
 → The 7B fp16 model needs ~14GB. If OOM, check that nothing else is using the GPU.
 
 **vLLM not found on new pod**
-→ Python packages don't persist. Run `./setup.sh` on each new pod.
+→ Python packages don't persist. Run `./start.sh` — it reinstalls them automatically.
 
 **Tools not found after pod restart**
-→ Run `source /workspace/.waltercheck-env` or re-run `./setup_tools.sh`.
+→ Run `source /workspace/.waltercheck-env` or re-run `./start.sh`.
 
 **PHPStan reports hundreds of "Function X not found"**
-→ PHPStan doesn't know about WordPress core functions. Add a `phpstan.neon` to your project (see CLAUDE.md for details).
+→ PHPStan doesn't know about WordPress core functions. Add a `phpstan.neon` to your project (see CLAUDE.project.md for details).
 
 **Half the review was third-party code**
 → Add `"exclude": ["plugin-update-checker/", "vendor/"]` to WalterChecks.json.

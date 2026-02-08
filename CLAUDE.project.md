@@ -1,4 +1,4 @@
-# CLAUDE.md — WalterChecks Reference for Claude Code
+# CLAUDE.project.md — WalterChecks Reference for Claude Code
 
 This document describes WalterChecks, a self-hosted code review system. When working on projects that will be reviewed by WalterChecks, use this reference to write code that passes review cleanly and to set up projects correctly.
 
@@ -305,7 +305,7 @@ parameters:
 1. WalterChecks produces a markdown report
 2. Feed the report to Claude Code: `"Read /path/to/report.md and fix all CRITICAL and WARNING issues"`
 3. Claude Code makes fixes on a branch
-4. Run WalterChecks again in PR mode: `python review.py pr <repo> --branch <fix-branch> --latest`
+4. Run WalterChecks again in PR mode: `python qa-bot/review.py pr repos/<name> --branch <fix-branch> --latest`
 5. Repeat until clean
 
 ## Severity Levels in Reports

@@ -8,21 +8,21 @@ Two modes:
 
 Output: Markdown report for Claude Code to ingest. This bot does NOT write code.
 
-Usage:
+Usage (from repo root):
     # Full repo scan
-    python review.py repo /workspace/repos/my-site --profile wordpress
+    python qa-bot/review.py repo repos/my-site --profile wordpress
 
     # PR review (compare branch to main)
-    python review.py pr /workspace/repos/my-site --branch feature/new-header
+    python qa-bot/review.py pr repos/my-site --branch feature/new-header
 
     # PR review (specific commit range)
-    python review.py pr /workspace/repos/my-site --range main..feature/new-header
+    python qa-bot/review.py pr repos/my-site --range main..feature/new-header
 
     # Tools only — no GPU needed
-    python review.py repo /workspace/repos/my-site --profile security --tools-only
+    python qa-bot/review.py repo repos/my-site --profile security --tools-only
 
     # LLM only — skip static analysis
-    python review.py repo /workspace/repos/my-site --profile wordpress --no-tools
+    python qa-bot/review.py repo repos/my-site --profile wordpress --no-tools
 """
 
 import argparse
@@ -737,22 +737,22 @@ def main():
         description="WalterChecks — Code review pipeline (report only, no code changes)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+Examples (from repo root):
   # Initial scan
-  python review.py repo /workspace/repos/my-site --profile wordpress
+  python qa-bot/review.py repo repos/my-site --profile wordpress
 
   # Review a PR
-  python review.py pr /workspace/repos/my-site --branch feature/new-header
+  python qa-bot/review.py pr repos/my-site --branch feature/new-header
 
   # Follow-up: CC filed a PR to fix your findings
-  python review.py pr /workspace/repos/my-site --branch cc-fixes --latest
+  python qa-bot/review.py pr repos/my-site --branch cc-fixes --latest
 
   # Follow-up: specify exact prior report
-  python review.py pr /workspace/repos/my-site --branch cc-fixes \
+  python qa-bot/review.py pr repos/my-site --branch cc-fixes \
     --prior-report reports/my-site-repo-wordpress-20260207-1430.md
 
   # Tools only (no GPU)
-  python review.py repo /workspace/repos/my-site --profile security --tools-only
+  python qa-bot/review.py repo repos/my-site --profile security --tools-only
         """)
 
     sub = parser.add_subparsers(dest="mode", required=True)

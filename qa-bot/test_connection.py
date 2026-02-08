@@ -55,7 +55,7 @@ def main():
     else:
         print("\n⚠ Model may not have caught SQL injection — check output above")
 
-    print("\nNext: python review.py repo /workspace/repos/<your-repo> --profile wordpress")
+    print("\nNext: python qa-bot/review.py repo repos/<your-repo> --profile wordpress")
 
 
 if __name__ == "__main__":
