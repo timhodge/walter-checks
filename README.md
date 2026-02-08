@@ -1,8 +1,28 @@
 # WalterChecks — Self-Hosted Code Review
 
-Self-hosted code review on RunPod GPU instances. Combines 11 static analysis tools with an LLM to produce structured markdown reports. Reports are designed to be fed to Claude Code for automated fixes.
+**This bot does NOT write code.** It finds issues. Your coding agent fixes them.
 
-**This bot does NOT write code.** It finds issues. Claude Code fixes them.
+WalterChecks is a fully self-hosted code review pipeline that combines 11 static analysis tools with an LLM to produce structured markdown reports. The reports are designed to be fed directly to Claude Code (or any coding agent) for automated fixes.
+
+## Why Self-Hosted?
+
+Every SaaS code review tool is one API change, pricing update, or sunset notice away from breaking your workflow. WalterChecks runs entirely on infrastructure you control — no API keys to manage, no rate limits to hit, no per-seat pricing, and no sending your private code to third-party services.
+
+The model, the GPU, the static analysis tools, and the review logic all live on a RunPod pod you spin up on demand. When you're not reviewing code, the pod is off and you're not paying for it. Your network volume keeps everything persistent between sessions for a few dollars a month.
+
+### Built to Evolve
+
+The current default setup uses **Qwen2.5-Coder-7B** on an **RTX 4090** — a fast, cheap combination that handles most codebases well. But nothing about WalterChecks is locked to that choice:
+
+- **Swap the model** — Point `serve.sh` at any vLLM-compatible model. A 14B or 32B model on a larger GPU will catch subtler issues. A smaller model on a cheaper card still runs the 11 static analysis tools perfectly.
+- **Swap the GPU** — Any CUDA-compatible card with enough VRAM works. The scripts auto-detect VRAM and configure accordingly. As new GPU generations become available (and vLLM adds support), just pick a different card on your next pod.
+- **Swap the provider** — While the setup scripts target RunPod, vLLM runs anywhere with a GPU. A local workstation, a cloud VM, a Kubernetes cluster — the review pipeline doesn't care where the model is served.
+
+The static analysis tools (PHPStan, Psalm, PHPCS, ESLint, etc.) are industry-standard open source tools installed via Composer and npm. They'll keep getting updates from their respective communities regardless of what happens in the AI space.
+
+### How It Fits Together
+
+WalterChecks is the **reviewer**. It reads code, runs tools, and writes a findings report. It never touches your codebase. A separate coding agent (we use Claude Code) reads the report, makes fixes on a branch, and you run WalterChecks again to verify. This separation means you can upgrade either side independently — a better model improves the reviews, a better coding agent improves the fixes.
 
 ## Architecture
 
