@@ -129,13 +129,11 @@ def _find_bin(tool: str, repo: str) -> str | None:
 
 def _php_dirs(repo: str) -> list[str]:
     """Auto-detect directories with PHP files."""
-    for d in ["app", "src", "wp-content/themes", "wp-content/plugins",
-              "public", "lib", "includes", "inc"]:
-        if os.path.isdir(os.path.join(repo, d)):
-            return [d for d in ["app", "src", "wp-content/themes", "wp-content/plugins",
-                                "public", "lib", "includes", "inc"]
-                    if os.path.isdir(os.path.join(repo, d))]
-    return ["."]
+    candidates = ["app", "src", "plugin", "theme",
+                  "wp-content/themes", "wp-content/plugins",
+                  "public", "lib", "includes", "inc"]
+    found = [d for d in candidates if os.path.isdir(os.path.join(repo, d))]
+    return found if found else ["."]
 
 
 def _has_ext(repo: str, exts: list[str]) -> bool:
@@ -425,18 +423,28 @@ def run_composer_audit(repo: str) -> AnalyzerResult:
     try:
         data = json.loads(stdout) if stdout else {}
         advs = data.get("advisories", {})
-        n = sum(len(v) for v in advs.values())
         lines = []
-        for pkg, vulns in advs.items():
-            for v in vulns:
-                sev = v.get("severity", "unknown")
-                lines.append(f"  [{sev.upper()}] {pkg}: {v.get('title', '?')} (CVE: {v.get('cve', 'N/A')})")
+        if isinstance(advs, dict):
+            n = sum(len(v) for v in advs.values())
+            for pkg, vulns in advs.items():
+                for v in vulns:
+                    sev = v.get("severity", "unknown")
+                    lines.append(f"  [{sev.upper()}] {pkg}: {v.get('title', '?')} (CVE: {v.get('cve', 'N/A')})")
+        elif isinstance(advs, list):
+            n = len(advs)
+            for v in advs:
+                sev = v.get("severity", "unknown") if isinstance(v, dict) else "unknown"
+                title = v.get("title", "?") if isinstance(v, dict) else str(v)
+                lines.append(f"  [{sev.upper()}] {title}")
+        else:
+            n = 0
         return AnalyzerResult(tool=name, success=True, findings_count=n,
                               output="\n".join(lines) or "No known vulnerabilities.",
                               summary=f"{n} known vulnerability/ies.")
-    except (json.JSONDecodeError, KeyError):
-        return AnalyzerResult(tool=name, success=True, findings_count=0,
-                              output=stdout or stderr)
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        return AnalyzerResult(tool=name, success=False, findings_count=0,
+                              output=stdout or stderr or str(e),
+                              error="Failed to parse composer audit output")
 
 
 # ===========================================================================
