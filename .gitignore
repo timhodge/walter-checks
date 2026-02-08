@@ -1,0 +1,23 @@
+# Reports (generated output, not source)
+reports/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# RunPod / runtime
+/workspace/
+
+# WSL artifacts
+*:Zone.Identifier
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,9 @@
+{
+  "name": "BWG Events",
+  "profile": "wordpress",
+  "root": "plugin/",
+  "exclude": [
+    "plugin-update-checker/"
+  ],
+  "phpstan_level": 5
+}
