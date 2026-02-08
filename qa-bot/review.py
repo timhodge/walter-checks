@@ -332,7 +332,7 @@ def find_latest_report(repo: str) -> str | None:
     """Auto-find the most recent WalterChecks report for this repo.
     Searches the reports/ directory for files matching the repo name,
     returns the newest one by modification time."""
-    rdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
+    rdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
     if not os.path.isdir(rdir):
         return None
     name = os.path.basename(os.path.normpath(repo)).lower()
@@ -722,7 +722,7 @@ def save_report(report: str, repo: str, profile: str, mode: str, out: str = None
     if out:
         path = out
     else:
-        rdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
+        rdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
         os.makedirs(rdir, exist_ok=True)
         name = os.path.basename(os.path.normpath(repo))
         ts = datetime.now().strftime("%Y%m%d-%H%M")

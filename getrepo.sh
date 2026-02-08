@@ -18,10 +18,11 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$1"
 BRANCH="${2:-}"
 REPO_NAME="$(basename "$REPO")"
-DEST="/workspace/repos/$REPO_NAME"
+DEST="$SCRIPT_DIR/repos/$REPO_NAME"
 
 if [ -d "$DEST/.git" ]; then
     echo "Already cloned: $DEST"
@@ -29,7 +30,7 @@ if [ -d "$DEST/.git" ]; then
     git -C "$DEST" pull
 else
     echo "Cloning $REPO → $DEST"
-    mkdir -p /workspace/repos
+    mkdir -p "$SCRIPT_DIR/repos"
     if [ -n "$BRANCH" ]; then
         git clone --branch "$BRANCH" "https://github.com/$REPO.git" "$DEST"
     else
@@ -48,4 +49,4 @@ fi
 
 echo ""
 echo "Ready to review:"
-echo "  python review.py repo $DEST"
+echo "  python qa-bot/review.py repo $DEST"

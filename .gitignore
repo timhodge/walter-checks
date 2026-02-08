@@ -1,5 +1,7 @@
-# Reports (generated output, not source)
+# Runtime data (persists on network volume, not source)
 reports/
+repos/
+models/
 
 # Python
 __pycache__/
@@ -7,9 +9,6 @@ __pycache__/
 *.pyo
 .venv/
 venv/
-
-# RunPod / runtime
-/workspace/
 
 # WSL artifacts
 *:Zone.Identifier

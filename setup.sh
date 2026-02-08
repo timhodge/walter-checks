@@ -74,16 +74,10 @@ fi
 # ---- Directory structure ----
 echo ""
 echo "[3/5] Setting up workspace..."
-mkdir -p /workspace/models
-mkdir -p /workspace/repos
-mkdir -p /workspace/qa-bot/reports
-
-# Copy scripts to persistent storage
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ "$SCRIPT_DIR" != "/workspace/qa-bot" ]; then
-    echo "  Copying scripts to /workspace/qa-bot..."
-    cp -r "$SCRIPT_DIR"/* /workspace/qa-bot/ 2>/dev/null || true
-fi
+mkdir -p "$SCRIPT_DIR/models"
+mkdir -p "$SCRIPT_DIR/repos"
+mkdir -p "$SCRIPT_DIR/reports"
 
 echo "  ✓ Workspace ready"
 
@@ -91,7 +85,7 @@ echo "  ✓ Workspace ready"
 echo ""
 echo "[4/5] Checking model..."
 
-MODEL_DIR="/workspace/models/qwen2.5-coder-7b-instruct"
+MODEL_DIR="$SCRIPT_DIR/models/qwen2.5-coder-7b-instruct"
 if [ -d "$MODEL_DIR" ] && [ -f "$MODEL_DIR/config.json" ]; then
     echo "  Model already downloaded at $MODEL_DIR"
     echo "  ✓ Skipping download"
@@ -142,11 +136,13 @@ echo "  Setup Complete!"
 echo "========================================="
 echo ""
 echo "  Next steps:"
-echo "    1. Install tools:   cd /workspace/qa-bot && ./setup_tools.sh"
+echo "    1. Install tools:   ./setup_tools.sh"
 echo "    2. Start server:    ./serve.sh"
-echo "    3. Clone a repo:    cd /workspace/repos && git clone <url>"
-echo "    4. Run a review:    python review.py repo /workspace/repos/<n> -p wordpress"
+echo "    3. Clone a repo:    ./getrepo.sh <owner/repo>"
+echo "    4. Run a review:    python qa-bot/review.py repo repos/<name> -p wordpress"
+echo ""
+echo "  Or just run ./start.sh to do all of the above."
 echo ""
 echo "  Your network volume keeps the model + credentials between pod restarts."
-echo "  On new pods, just re-run: ./setup_tools.sh && ./serve.sh"
+echo "  On new pods, just re-run: ./start.sh"
 echo ""

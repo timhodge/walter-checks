@@ -8,7 +8,8 @@ set -e
 # Source tool paths if available
 [ -f /workspace/.waltercheck-env ] && source /workspace/.waltercheck-env
 
-MODEL_PATH="/workspace/models/qwen2.5-coder-7b-instruct"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODEL_PATH="$SCRIPT_DIR/models/qwen2.5-coder-7b-instruct"
 
 if [ ! -d "$MODEL_PATH" ]; then
     echo "Model not found at $MODEL_PATH"
@@ -20,7 +21,7 @@ echo "Starting vLLM server..."
 echo "Model: Qwen2.5-Coder-7B-Instruct (fp16)"
 echo ""
 echo "Once you see 'Uvicorn running', open a second terminal and run:"
-echo "  python review.py repo /workspace/repos/<your-repo> --profile wordpress"
+echo "  python qa-bot/review.py repo repos/<your-repo> --profile wordpress"
 echo ""
 
 # Auto-detect VRAM and pick optimal settings
