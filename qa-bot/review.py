@@ -29,6 +29,7 @@ import argparse
 import inspect
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -547,6 +548,40 @@ GROUPERS = {
 # LLM INTERACTION
 # ===========================================================================
 
+def _dedup_response(text: str) -> str:
+    """Detect and truncate repetitive LLM output.
+
+    Small models sometimes enter a loop, repeating the same finding dozens
+    of times until they hit max_tokens. This detects repeated blocks and
+    keeps only the first occurrence."""
+    if not text or len(text) < 500:
+        return text
+    # Split on markdown heading boundaries (### or ##) or double newlines
+    blocks = re.split(r'\n(?=\*\*(?:File|Issue|Line))', text)
+    if len(blocks) < 4:
+        return text
+    # Check if blocks repeat: compare normalized text
+    seen = {}
+    unique_parts = []
+    repeats = 0
+    for block in blocks:
+        key = re.sub(r'\s+', ' ', block.strip())[:200]
+        if key in seen:
+            repeats += 1
+            if repeats >= 3:
+                continue  # Skip after 3 repetitions
+        else:
+            seen[key] = True
+            repeats = 0
+        unique_parts.append(block)
+    if len(unique_parts) < len(blocks):
+        trimmed = len(blocks) - len(unique_parts)
+        result = "\n".join(unique_parts)
+        result += f"\n\n*[WalterChecks: {trimmed} repeated finding(s) removed]*"
+        return result
+    return text
+
+
 def review_batch(client: OpenAI, sys_prompt: str, batch: list[dict],
                  model: str, analysis_ctx: str = "", diff_ctx: str = "",
                  prior_report_ctx: str = "") -> str:
@@ -593,7 +628,7 @@ def review_batch(client: OpenAI, sys_prompt: str, batch: list[dict],
             temperature=0.1,
             max_tokens=4096,
         )
-        return resp.choices[0].message.content
+        return _dedup_response(resp.choices[0].message.content)
     except Exception as e:
         return f"**Error reviewing batch:** {e}"
 

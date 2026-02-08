@@ -18,9 +18,11 @@ _REPORT_PREAMBLE = """CRITICAL RULES — follow these strictly:
 - Do NOT flag code that is already doing the right thing. For example, a query using $wpdb->prepare() is NOT SQL injection.
 - Do NOT report plugin-wide or project-wide concerns (missing uninstall.php, missing activation hooks, etc.) unless you see direct evidence in the code shown. These are architecture issues, not file-level findings.
 - Do NOT list every line number in a file. Each finding must point to ONE specific location with ONE specific problem.
+- NEVER repeat a finding. Each issue is reported exactly ONCE. After reporting it, move on. If there are no more issues, stop.
 - Do NOT fill out a checklist — skip any category that has no real findings
 - If a file has zero issues, just say "No issues found." and stop
 - Silence on a topic means the code is clean. Do NOT explain why something is not a problem.
+- phpcs:ignore, @phpstan-ignore, and similar suppression comments are intentional decisions. Examine the ACTUAL CODE, not the comment. Only flag the code if it is genuinely wrong despite the suppression.
 - 3 real findings with quoted code are worth more than 30 generic observations
 
 """
