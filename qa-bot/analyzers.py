@@ -382,6 +382,7 @@ def run_phpcpd(repo: str) -> AnalyzerResult:
 
 def run_phpinsights(repo: str) -> AnalyzerResult:
     """PHP Insights — quality scoring: code, complexity, architecture, style."""
+    name = "PHP Insights"
     phpinsights_bin = _find_bin("phpinsights", repo)
     if not phpinsights_bin:
         return AnalyzerResult(tool=name, success=False, error="Not installed")

@@ -65,7 +65,8 @@ def load_config(repo: str) -> dict:
     {
         "name": "My Plugin",          // Display name for reports
         "profile": "wordpress",       // Default profile (CLI --profile overrides)
-        "root": "plugin/",            // Subdirectory to scan (relative to repo root)
+        "root": "plugin/",            // Subdirectory to scan for LLM review
+                                      // (tools still run from repo root where configs live)
         "exclude": [                  // Additional dirs to skip (on top of .gitignore + profile defaults)
             "plugin-update-checker/",
             "lib/legacy/"
@@ -88,29 +89,35 @@ def load_config(repo: str) -> dict:
     return {}
 
 
-def apply_config(config: dict, repo: str, args) -> tuple[str, dict]:
-    """Apply WalterChecks.json config. Returns (effective_repo_path, config).
+def apply_config(config: dict, repo_root: str, args) -> tuple[str, str, dict]:
+    """Apply WalterChecks.json config. Returns (repo_root, scan_root, config).
+
+    repo_root: the actual repo directory (where configs and .git live).
+               Tools run from here so they find phpstan.neon, .phpcs.xml.dist, etc.
+    scan_root: subdirectory to scan for LLM file discovery (same as repo_root
+               unless 'root' is specified in config).
+
     CLI arguments always override config values."""
 
-    # root: redirect scan to subdirectory
-    effective_repo = repo
+    # root: redirect file discovery to subdirectory (tools still run from repo_root)
+    scan_root = repo_root
     if "root" in config:
-        candidate = os.path.join(repo, config["root"])
+        candidate = os.path.join(repo_root, config["root"])
         if os.path.isdir(candidate):
-            effective_repo = candidate
+            scan_root = candidate
             console.print(f"  Scan root: [bold]{config['root']}[/bold]")
         else:
             console.print(f"  [yellow]Warning:[/yellow] root '{config['root']}' not found, scanning full repo")
 
-    # profile: use as default if --profile wasn't explicitly set
-    if config.get("profile") and args.profile == "wordpress":
+    # profile: use config as default if --profile wasn't explicitly set
+    if config.get("profile") and args.profile is None:
         args.profile = config["profile"]
 
     # phpstan_level: use as default if not set via CLI
     if config.get("phpstan_level") is not None and args.phpstan_level is None:
         args.phpstan_level = config["phpstan_level"]
 
-    return effective_repo, config
+    return repo_root, scan_root, config
 
 
 # ===========================================================================
@@ -760,7 +767,7 @@ Examples (from repo root):
     # -- repo mode --
     rp = sub.add_parser("repo", help="Full repository scan")
     rp.add_argument("repo_path")
-    rp.add_argument("--profile", "-p", default="general", choices=list(PROFILES.keys()))
+    rp.add_argument("--profile", "-p", default=None, choices=list(PROFILES.keys()))
     rp.add_argument("--output", "-o", default=None)
     rp.add_argument("--max-files", type=int, default=MAX_TOTAL_FILES)
     rp.add_argument("--no-tools", action="store_true", help="Skip static analysis")
@@ -778,7 +785,7 @@ Examples (from repo root):
     pp.add_argument("--branch", "-b", default=None, help="Branch to review")
     pp.add_argument("--base", default="main", help="Base branch (default: main)")
     pp.add_argument("--range", default=None, help="Commit range (e.g. main..feature/x)")
-    pp.add_argument("--profile", "-p", default="general", choices=list(PROFILES.keys()))
+    pp.add_argument("--profile", "-p", default=None, choices=list(PROFILES.keys()))
     pp.add_argument("--output", "-o", default=None)
     pp.add_argument("--no-tools", action="store_true")
     pp.add_argument("--tools-only", action="store_true")
@@ -798,9 +805,13 @@ Examples (from repo root):
     # ---- Load project config ----
     console.print("\n[cyan]Loading project config...[/cyan]")
     config = load_config(repo)
-    repo, config = apply_config(config, repo, args)
+    repo_root, scan_root, config = apply_config(config, repo, args)
     extra_excludes = config.get("exclude", [])
-    project_name = config.get("name", os.path.basename(os.path.normpath(repo)))
+    project_name = config.get("name", os.path.basename(os.path.normpath(repo_root)))
+
+    # Fall back to "general" if no profile specified via CLI or config
+    if args.profile is None:
+        args.profile = "general"
 
     if extra_excludes:
         console.print(f"  Excluding: {', '.join(extra_excludes)}")
@@ -809,7 +820,7 @@ Examples (from repo root):
         console.print(f"  [dim]Tip: Add a {CONFIG_FILENAME} to your repo root to configure reviews[/dim]")
 
     # Auto-detect theme vs plugin for generic "wordpress" profile
-    resolved_profile_name, profile = resolve_profile(args.profile, repo)
+    resolved_profile_name, profile = resolve_profile(args.profile, scan_root)
     phpstan_defaults = {"wordpress": 5, "wp-theme": 5, "wp-plugin": 5, "laravel": 6}
     phpstan_level = args.phpstan_level if args.phpstan_level is not None \
         else phpstan_defaults.get(resolved_profile_name, 5)
@@ -818,9 +829,10 @@ Examples (from repo root):
     detected_note = ""
     if args.profile == "wordpress" and resolved_profile_name != "wordpress":
         detected_note = f"\nAuto-detected: [bold green]{resolved_profile_name}[/bold green]"
+    repo_display = repo_root if repo_root == scan_root else f"{repo_root} (scanning {config.get('root', '')})"
     console.print(Panel(
         f"[bold]{mode_label}[/bold] — {profile['name']}\n"
-        f"Project: {project_name}\nRepo: {repo}\nPHPStan Level: {phpstan_level}{detected_note}",
+        f"Project: {project_name}\nRepo: {repo_display}\nPHPStan Level: {phpstan_level}{detected_note}",
         title="🔍 WalterChecks", border_style="cyan"))
 
     start = time.time()
@@ -831,7 +843,7 @@ Examples (from repo root):
     if hasattr(args, 'prior_report') and args.prior_report:
         prior_report_path = os.path.abspath(args.prior_report)
     elif hasattr(args, 'latest') and args.latest:
-        prior_report_path = find_latest_report(repo)
+        prior_report_path = find_latest_report(repo_root)
 
     if prior_report_path:
         if os.path.isfile(prior_report_path):
@@ -845,7 +857,8 @@ Examples (from repo root):
         console.print(f"\n[yellow]Warning:[/yellow] No previous reports found for this repo")
 
     # ---- Static analysis ----
-    analysis_ctx, analysis_rpt = run_tools(repo, resolved_profile_name, phpstan_level, args.no_tools)
+    # Tools run from repo_root where config files (phpstan.neon, .phpcs.xml.dist) live
+    analysis_ctx, analysis_rpt = run_tools(repo_root, resolved_profile_name, phpstan_level, args.no_tools)
 
     if args.tools_only:
         report = (
@@ -853,7 +866,7 @@ Examples (from repo root):
             f"**Mode:** Tools Only\n**Profile:** {profile['name']}\n"
             f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n---\n\n"
             f"## Static Analysis Results\n\n{analysis_rpt}\n")
-        path = save_report(report, repo, resolved_profile_name, "tools", args.output)
+        path = save_report(report, repo_root, resolved_profile_name, "tools", args.output)
         console.print(f"\n[green]Report saved:[/green] {path}")
         sys.exit(0)
 
@@ -864,7 +877,7 @@ Examples (from repo root):
 
     if args.mode == "pr":
         console.print("\n[cyan]Analyzing PR...[/cyan]")
-        changed = git_changed_files(repo, branch=args.branch,
+        changed = git_changed_files(repo_root, branch=args.branch,
                                     commit_range=args.range, base=args.base)
         if not changed:
             console.print("[yellow]No changed files found.[/yellow]")
@@ -875,16 +888,16 @@ Examples (from repo root):
         if len(changed) > 20:
             console.print(f"    ... and {len(changed) - 20} more")
         file_filter = changed
-        diff_ctx = git_diff(repo, branch=args.branch,
+        diff_ctx = git_diff(repo_root, branch=args.branch,
                             commit_range=args.range, base=args.base)
-        commits = git_log(repo, branch=args.branch,
+        commits = git_log(repo_root, branch=args.branch,
                           commit_range=args.range, base=args.base)
         pr_info = {"branch": args.branch or args.range or "HEAD",
                    "base": args.base, "changed_count": len(changed),
                    "commits": commits}
 
     console.print("\n[cyan]Scanning files...[/cyan]")
-    files = discover_files(repo, profile, file_filter=file_filter,
+    files = discover_files(scan_root, profile, file_filter=file_filter,
                            extra_excludes=extra_excludes)
     console.print(f"  Found [bold]{len(files)}[/bold] reviewable files")
     if not files:
@@ -927,13 +940,13 @@ Examples (from repo root):
     elapsed = time.time() - start
 
     is_followup = bool(prior_report_ctx)
-    report = generate_report(args.mode, results, profile["name"], repo,
+    report = generate_report(args.mode, results, profile["name"], repo_root,
                              elapsed, analysis_rpt, pr_info,
                              is_followup=is_followup,
                              prior_report_path=prior_report_path,
                              project_name=project_name)
     mode_suffix = "followup" if is_followup else args.mode
-    path = save_report(report, repo, resolved_profile_name, mode_suffix, args.output)
+    path = save_report(report, repo_root, resolved_profile_name, mode_suffix, args.output)
 
     console.print(f"\n[green]Review complete![/green]")
     console.print(f"  Report: [bold]{path}[/bold]")
