@@ -109,9 +109,101 @@ Drop this in your repo root to configure reviews. Checked into git so the whole 
 |-------|----------|-------------|
 | `name` | No | Display name for reports (defaults to folder name) |
 | `profile` | No | Default review profile. CLI `--profile` overrides |
-| `root` | No | Subdirectory to scan (e.g. plugin code lives in `plugin/`) |
+| `root` | No | Subdirectory containing source code (tools still run from repo root where configs live) |
 | `exclude` | No | Additional directories to skip (on top of .gitignore + profile defaults) |
 | `phpstan_level` | No | PHPStan level 0-9 (default: 5 for WP, 6 for Laravel) |
+
+## Preparing Your Project
+
+WalterChecks runs standard tools (PHPStan, PHPCS, ESLint, etc.) against your code. These tools look for their config files in the repo root. For the cleanest results, set up your project so tools find the right configs automatically.
+
+### Config File Placement
+
+**All config files live at the repo root.** If your code lives in a subdirectory (e.g. `plugin/`), the config files still go at root — each one points into the code directory via its own path settings.
+
+```
+my-project/
+├── WalterChecks.json          ← Review config
+├── phpstan.neon               ← PHPStan config (points at plugin/)
+├── .phpcs.xml.dist            ← PHPCS config (points at plugin/)
+├── composer.json               ← Dependencies (WP stubs, etc.)
+├── plugin/                    ← Actual code
+│   ├── my-plugin.php
+│   ├── includes/
+│   └── vendor/                ← Composer deps for the plugin
+└── dev-tools/                 ← Optional local dev scripts
+```
+
+### WordPress Plugin Example
+
+**WalterChecks.json:**
+```json
+{
+  "name": "My Plugin",
+  "profile": "wordpress",
+  "root": "plugin/",
+  "exclude": ["vendor/"],
+  "phpstan_level": 6
+}
+```
+
+**phpstan.neon** (at repo root, scans into `plugin/`):
+```yaml
+includes:
+    - plugin/vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - plugin
+    excludePaths:
+        - plugin/vendor
+    scanFiles:
+        - plugin/my-plugin.php
+```
+
+The WordPress extension (`szepeviktor/phpstan-wordpress`) teaches PHPStan about WordPress core functions, hooks, and globals. Without it, PHPStan will report hundreds of "Function not found" errors for things like `add_action`, `wp_enqueue_script`, etc.
+
+Install it in your plugin's Composer dev dependencies:
+```bash
+cd plugin && composer require --dev szepeviktor/phpstan-wordpress
+```
+
+**.phpcs.xml.dist** (at repo root, scans into `plugin/`):
+```xml
+<?xml version="1.0"?>
+<ruleset name="My Plugin Standards">
+    <description>WordPress coding standards</description>
+    <rule ref="WordPress"/>
+    <arg name="extensions" value="php"/>
+    <file>plugin</file>
+    <exclude-pattern>plugin/vendor/*</exclude-pattern>
+</ruleset>
+```
+
+### Why Configs at Root?
+
+The `root` field in WalterChecks.json controls where the **LLM scans for source files** to review. But static analysis tools always run from the repo root, where they expect to find their config files. This separation means:
+
+- One set of configs, shared between local dev, CI, and WalterChecks
+- Tools pick up project-specific settings (ignore patterns, WP stubs, custom rules)
+- No duplicate configs in subdirectories
+
+### Simple Projects (No Subdirectory)
+
+If your code is at the repo root (no `root` field needed), the setup is simpler:
+
+```
+my-theme/
+├── WalterChecks.json
+├── phpstan.neon
+├── .phpcs.xml.dist
+├── style.css
+├── functions.php
+└── ...
+```
+
+Just point the tools at `.` (current directory) in their configs, or let them auto-detect.
 
 ## GitHub Access
 
@@ -211,7 +303,7 @@ Plus ~$3.50/mo for 50GB network volume storage.
 → Run `source /workspace/.waltercheck-env` or re-run `./start.sh`.
 
 **PHPStan reports hundreds of "Function X not found"**
-→ PHPStan doesn't know about WordPress core functions. Add a `phpstan.neon` to your project (see CLAUDE.project.md for details).
+→ PHPStan doesn't know about WordPress core functions. Add a `phpstan.neon` with the WordPress extension — see "Preparing Your Project" above.
 
 **Half the review was third-party code**
 → Add `"exclude": ["plugin-update-checker/", "vendor/"]` to WalterChecks.json.

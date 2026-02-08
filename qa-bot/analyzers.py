@@ -380,40 +380,6 @@ def run_phpcpd(repo: str) -> AnalyzerResult:
                           summary=f"{n} duplicated code block(s).")
 
 
-def run_phpinsights(repo: str) -> AnalyzerResult:
-    """PHP Insights — quality scoring: code, complexity, architecture, style."""
-    name = "PHP Insights"
-    phpinsights_bin = _find_bin("phpinsights", repo)
-    if not phpinsights_bin:
-        return AnalyzerResult(tool=name, success=False, error="Not installed")
-    cmd = [phpinsights_bin, "analyse", "--no-interaction", "--format=json",
-           "--min-quality=0", "--min-complexity=0",
-           "--min-architecture=0", "--min-style=0"]
-    code, stdout, stderr = _run(cmd, repo, timeout=180)
-    try:
-        data = json.loads(stdout) if stdout else {}
-        scores = []
-        for metric in ["Code", "Complexity", "Architecture", "Style"]:
-            s = data.get(metric.lower(), {}).get("percentage", "?")
-            scores.append(f"{metric}: {s}%")
-        n = 0
-        lines = []
-        for cat, cd in data.items():
-            if isinstance(cd, dict) and "insights" in cd:
-                for ins in cd["insights"]:
-                    if ins.get("has_issue", False):
-                        n += 1
-                        title = ins.get("title", "?")
-                        for d in ins.get("details", [])[:3]:
-                            lines.append(f"  [{cat.upper()}] {title}: {d}")
-        return AnalyzerResult(tool=name, success=True, findings_count=n,
-                              output="\n".join(lines) or "No issues found.",
-                              summary=f"Scores: {', '.join(scores)}. Issues: {n}.")
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return AnalyzerResult(tool=name, success=True, findings_count=0,
-                              output=stdout or stderr, error="Parse error")
-
-
 def run_rector_dry(repo: str) -> AnalyzerResult:
     """Rector (dry run) — finds deprecated PHP/WP patterns, shows what would change."""
     name = "Rector (Deprecation Check)"
