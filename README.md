@@ -12,10 +12,19 @@ The model, the GPU, the static analysis tools, and the review logic all live on 
 
 ### Built to Evolve
 
-The current default setup uses **Qwen2.5-Coder-7B** on an **RTX 4090** — a fast, cheap combination that handles most codebases well. But nothing about WalterChecks is locked to that choice:
+`serve.sh` auto-detects your GPU, shows compatible models, and recommends the best one. Three models are available out of the box:
 
-- **Swap the model** — Point `serve.sh` at any vLLM-compatible model. A 14B or 32B model on a larger GPU will catch subtler issues. A smaller model on a cheaper card still runs the 11 static analysis tools perfectly.
-- **Swap the GPU** — Any CUDA-compatible card with enough VRAM works. The scripts auto-detect VRAM and configure accordingly. As new GPU generations become available (and vLLM adds support), just pick a different card on your next pod.
+| Model | Size | Min GPU | Best For |
+|-------|------|---------|----------|
+| **Qwen2.5-Coder-32B** | ~64GB | 80GB (A100 80GB) | Highest quality, full precision |
+| **Qwen2.5-Coder-32B-AWQ** | ~20GB | 24GB (RTX 4090+) | Best quality-per-dollar |
+| **Qwen2.5-Coder-7B** | ~14GB | 24GB (RTX 4090+) | Fast, cheapest option |
+
+The 32B models catch subtler issues that the 7B misses — fewer false positives, better line number accuracy, and no checklist hallucinations.
+
+Nothing about WalterChecks is locked to these choices:
+
+- **Swap the GPU** — Any CUDA-compatible card with 24GB+ VRAM works. The scripts auto-detect VRAM and configure accordingly. As new GPU generations become available (and vLLM adds support), just pick a different card on your next pod.
 - **Swap the provider** — While the setup scripts target RunPod, vLLM runs anywhere with a GPU. A local workstation, a cloud VM, a Kubernetes cluster — the review pipeline doesn't care where the model is served.
 
 The static analysis tools (PHPStan, Psalm, PHPCS, ESLint, etc.) are industry-standard open source tools installed via Composer and npm. They'll keep getting updates from their respective communities regardless of what happens in the AI space.
@@ -31,9 +40,9 @@ RunPod Pod (GPU)
 └── Network Volume (/workspace)
     ├── start.sh                ← Single entry point
     ├── getrepo.sh              ← Clone repos for review
-    ├── setup.sh                ← Python deps, PHP, model download
+    ├── setup.sh                ← Python deps, PHP, workspace dirs
     ├── setup_tools.sh          ← Static analysis tool installation
-    ├── serve.sh                ← Starts vLLM server
+    ├── serve.sh                ← GPU detection, model selection, starts vLLM
     ├── qa-bot/
     │   ├── review.py           ← Runs tools, sends to model, generates report
     │   ├── analyzers.py        ← Static analysis tool runners
@@ -54,7 +63,7 @@ RunPod Pod (GPU)
 - Pick the same region you'll launch pods in
 
 ### 2. Launch a Pod
-- GPU: **RTX 4090** ($0.59/hr, 24GB) — always available, fast with 7B model
+- GPU: See [Compatible GPUs](#compatible-gpus) below — pick based on model quality/cost tradeoff
 - Template: RunPod PyTorch (any CUDA-enabled template)
 - Attach your network volume → mounts at `/workspace`
 
@@ -65,9 +74,21 @@ git clone https://github.com/timhodge/walter-checks.git .
 bash start.sh
 ```
 
-`start.sh` runs setup, installs tools, and starts the LLM server. Safe to run every time — skips anything already installed.
+> **"destination path '.' already exists and is not an empty directory"** — This happens if you already have files on the network volume (e.g. `.git-credentials`). Use `git init` instead:
+> ```bash
+> cd /workspace
+> git init && git remote add origin https://github.com/timhodge/walter-checks.git && git pull origin main
+> bash start.sh
+> ```
 
-Wait for "Application startup complete" — usually 1-2 minutes.
+If the repo is already cloned from a previous pod, just pull and start:
+```bash
+cd /workspace && git pull && bash start.sh
+```
+
+`start.sh` runs setup, installs tools, then starts the LLM server. On first run, you'll be prompted to select a model — the script recommends the best one for your GPU. Safe to run every time — skips anything already installed.
+
+Wait for "Application startup complete" — usually 1-2 minutes (plus model download time on first run).
 
 ### 4. Run a Review
 In a second terminal:
@@ -94,11 +115,13 @@ The `wc-reports/` folder is the convention for storing WalterChecks reports insi
 
 ## On Subsequent Pods
 
-Network volume keeps the repo, model, tools, and credentials. On a new pod:
+Network volume keeps the repo, models, tools, and credentials. On a new pod:
 ```bash
 cd /workspace
-./start.sh    # Reinstalls Python deps, checks tools, starts server
+./start.sh    # Reinstalls Python deps, checks tools, prompts for model, starts server
 ```
+
+Already-downloaded models show `[installed]` in the menu — no re-download needed.
 
 ## WalterChecks.json
 
@@ -276,18 +299,41 @@ python qa-bot/review.py repo repos/my-site --prior-report reports/previous.md
 
 ## Compatible GPUs
 
-| GPU | VRAM | $/hr | Architecture | Status |
-|-----|------|------|--------------|--------|
-| **RTX 4090** | 24GB | $0.59 | Ada | Best pick — fast, cheap, always available |
-| A40 | 48GB | $0.40 | Ampere | Cheapest (low availability) |
-| L40S | 48GB | $0.86 | Ada | Works great |
-| RTX 6000 Ada | 48GB | $0.77 | Ada | Works great |
-| A100 SXM | 80GB | $1.39 | Ampere | Works but AWQ is slow on Ampere |
-| RTX 5090 | 32GB | — | Blackwell | vLLM not compatible |
-| RTX PRO 4500 | 32GB | $0.54 | Blackwell | Despite the name, it's Blackwell |
-| RTX PRO 6000 | 96GB | $1.69 | Blackwell | vLLM not compatible |
+| GPU | VRAM | $/hr | Arch | Recommended Model | Also Available |
+|-----|------|------|------|-------------------|----------------|
+| **RTX 4090** | 24GB | $0.59 | Ada | 32B-AWQ (~8K ctx) | 7B |
+| A40 | 48GB | $0.40 | Ampere | 32B-AWQ (32K ctx) | 7B |
+| L40S | 48GB | $0.86 | Ada | 32B-AWQ (32K ctx) | 7B |
+| RTX 6000 Ada | 48GB | $0.77 | Ada | 32B-AWQ (32K ctx) | 7B |
+| **A100 PCIe** | 40GB | $0.79 | Ampere | 32B-AWQ (32K ctx) | 7B |
+| **A100 SXM** | 80GB | $1.39 | Ampere | 32B fp16 (32K ctx) | 32B-AWQ, 7B |
+| RTX 5090 | 32GB | — | Blackwell | Not supported | — |
+| RTX PRO 4500 | 32GB | $0.54 | Blackwell | Not supported | — |
+| RTX PRO 6000 | 96GB | $1.69 | Blackwell | Not supported | — |
+| MI300X | 192GB | $3.49 | AMD ROCm | Not supported | — |
 
-**Rule of thumb:** If it says "Blackwell", "RTX 50xx", or "RTX PRO" — don't use it until vLLM ships Blackwell support.
+**Blackwell GPUs** ("RTX 50xx", "RTX PRO", "B100/B200") — vLLM doesn't support Blackwell yet. The script detects these and exits with a clear message.
+
+**AMD GPUs** (MI300X) — vLLM supports ROCm, but the setup requires different Docker templates, ROCm-specific vLLM wheels, and different GPU detection. Not yet implemented.
+
+### Model Selection
+
+When you run `./serve.sh`, it detects your GPU and shows an interactive menu:
+
+```
+  GPU: NVIDIA A100-PCIE-40GB (40960 MB)
+
+  Models for your GPU:
+
+  1) Qwen2.5-Coder-7B             ~14GB    fast, lower quality
+  2) Qwen2.5-Coder-32B-AWQ        ~20GB    best quality              (recommended)
+
+  Select model [2]:
+```
+
+Press Enter for the recommended model, or pick a number. The model downloads on first use and stays on your network volume for future sessions.
+
+**Non-interactive mode:** `./serve.sh --model 32b-awq` skips the menu. Useful for scripts or when you know what you want.
 
 ## Cost Estimates
 
@@ -306,7 +352,7 @@ Plus ~$3.50/mo for 50GB network volume storage.
 → You're on a Blackwell GPU. Switch to Ada/Ampere (see table above).
 
 **"CUDA out of memory"**
-→ The 7B fp16 model needs ~14GB. If OOM, check that nothing else is using the GPU.
+→ Try a smaller model (`./serve.sh --model 7b`), or check that nothing else is using the GPU.
 
 **vLLM not found on new pod**
 → Python packages don't persist. Run `./start.sh` — it reinstalls them automatically.
@@ -320,5 +366,5 @@ Plus ~$3.50/mo for 50GB network volume storage.
 **Half the review was third-party code**
 → Add `"exclude": ["plugin-update-checker/", "vendor/"]` to WalterChecks.json.
 
-**Model response is slow on A100**
-→ A100 has INT8 but not INT4 tensor cores. AWQ (4-bit) runs slowly on Ampere. Use the fp16 7B model on Ada (RTX 4090) instead.
+**32B-AWQ on 24GB GPU runs out of context**
+→ On 24GB cards, the 32B-AWQ model runs with ~8K context. This is enough for WalterChecks (batches are ~7K tokens), but if you see truncation, fall back to 7B which gets full 32K context on 24GB.

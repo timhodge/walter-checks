@@ -1,8 +1,8 @@
 #!/bin/bash
 # setup.sh — First-time setup on RunPod
 # Run ONCE after creating your network volume and launching a pod.
-# Installs: Python deps, PHP 8.4, model weights
-# Time: ~5-10 min (mostly model download)
+# Installs: Python deps, PHP 8.4, workspace directories
+# Model download happens at serve time (./serve.sh)
 set -e
 
 echo "========================================="
@@ -17,7 +17,7 @@ fi
 
 # ---- Python dependencies ----
 echo ""
-echo "[1/5] Installing Python dependencies..."
+echo "[1/4] Installing Python dependencies..."
 pip install --break-system-packages -q \
     vllm \
     openai \
@@ -30,7 +30,7 @@ echo "  ✓ Python packages installed"
 
 # ---- PHP 8.4 (needed for static analysis tools) ----
 echo ""
-echo "[2/5] Installing PHP 8.4..."
+echo "[2/4] Installing PHP 8.4..."
 
 install_php() {
     echo "  Step 1: Installing prerequisites..."
@@ -73,7 +73,7 @@ fi
 
 # ---- Directory structure ----
 echo ""
-echo "[3/5] Setting up workspace..."
+echo "[3/4] Setting up workspace..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$SCRIPT_DIR/models"
 mkdir -p "$SCRIPT_DIR/repos"
@@ -81,41 +81,9 @@ mkdir -p "$SCRIPT_DIR/reports"
 
 echo "  ✓ Workspace ready"
 
-# ---- Download model ----
-echo ""
-echo "[4/5] Checking model..."
-
-MODEL_DIR="$SCRIPT_DIR/models/qwen2.5-coder-7b-instruct"
-if [ -d "$MODEL_DIR" ] && [ -f "$MODEL_DIR/config.json" ]; then
-    echo "  Model already downloaded at $MODEL_DIR"
-    echo "  ✓ Skipping download"
-else
-    echo "  Downloading: Qwen2.5-Coder-7B-Instruct (~14GB, fp16)"
-    echo "  Runs on any 24GB+ GPU at full precision"
-    echo ""
-
-    # hf_transfer gives ~10x faster downloads on RunPod
-    export HF_HUB_ENABLE_HF_TRANSFER=1
-
-    if command -v hf &> /dev/null; then
-        hf download \
-            Qwen/Qwen2.5-Coder-7B-Instruct \
-            --local-dir "$MODEL_DIR"
-    else
-        python -c "
-from huggingface_hub import snapshot_download
-snapshot_download(
-    'Qwen/Qwen2.5-Coder-7B-Instruct',
-    local_dir='$MODEL_DIR'
-)
-"
-    fi
-    echo "  ✓ Model downloaded"
-fi
-
 # ---- Git credentials (optional) ----
 echo ""
-echo "[5/5] Git configuration..."
+echo "[4/4] Git configuration..."
 
 if [ -f "/workspace/.git-credentials" ]; then
     git config --global credential.helper 'store --file=/workspace/.git-credentials'
@@ -137,12 +105,12 @@ echo "========================================="
 echo ""
 echo "  Next steps:"
 echo "    1. Install tools:   ./setup_tools.sh"
-echo "    2. Start server:    ./serve.sh"
+echo "    2. Start server:    ./serve.sh        (model selection happens here)"
 echo "    3. Clone a repo:    ./getrepo.sh <owner/repo>"
 echo "    4. Run a review:    python qa-bot/review.py repo repos/<name> -p wordpress"
 echo ""
 echo "  Or just run ./start.sh to do all of the above."
 echo ""
-echo "  Your network volume keeps the model + credentials between pod restarts."
+echo "  Your network volume keeps models + credentials between pod restarts."
 echo "  On new pods, just re-run: ./start.sh"
 echo ""
