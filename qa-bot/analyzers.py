@@ -380,8 +380,18 @@ def run_phpcpd(repo: str) -> AnalyzerResult:
     if not shutil.which("phpcpd"):
         return AnalyzerResult(tool=name, success=False, error="Not installed")
     dirs = _php_dirs(repo)
-    cmd = ["phpcpd", "--min-lines=5", "--min-tokens=70",
-           "--exclude=vendor", "--exclude=node_modules"] + dirs
+    # Exclude vendor/node_modules at repo root AND nested inside scan dirs
+    # (e.g. plugin/vendor/ when _php_dirs returns ["plugin"])
+    excludes = ["vendor", "node_modules"]
+    for d in dirs:
+        for skip in ("vendor", "node_modules"):
+            nested = os.path.join(d, skip)
+            if os.path.isdir(os.path.join(repo, nested)):
+                excludes.append(nested)
+    cmd = ["phpcpd", "--min-lines=5", "--min-tokens=70"]
+    for e in excludes:
+        cmd.extend(["--exclude", e])
+    cmd += dirs
     code, stdout, stderr = _run(cmd, repo)
     output = (stdout + "\n" + stderr).strip()
     match = re.search(r"Found (\d+) clones", output)

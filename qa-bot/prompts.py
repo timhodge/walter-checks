@@ -18,7 +18,7 @@ _REPORT_PREAMBLE = """CRITICAL RULES — follow these strictly:
 - Do NOT flag code that is already doing the right thing. For example, a query using $wpdb->prepare() is NOT SQL injection.
 - Do NOT report plugin-wide or project-wide concerns (missing uninstall.php, missing activation hooks, etc.) unless you see direct evidence in the code shown. These are architecture issues, not file-level findings.
 - Do NOT list every line number in a file. Each finding must point to ONE specific location with ONE specific problem.
-- NEVER repeat a finding. Each issue is reported exactly ONCE. After reporting it, move on. If there are no more issues, stop.
+- NEVER repeat a finding. Each issue is reported exactly ONCE at ONE severity level. After reporting it, move on. If there are no more issues, stop.
 - Do NOT fill out a checklist — skip any category that has no real findings
 - If a file has zero issues, just say "No issues found." and stop
 - Silence on a topic means the code is clean. Do NOT explain why something is not a problem.
@@ -42,6 +42,18 @@ Group related findings. If the same pattern repeats across files, note it once a
 If you find nothing, say "No issues found." — do NOT pad the report."""
 
 
+_WP_DOMAIN_KNOWLEDGE = """
+WORDPRESS INTERNALS — do NOT flag these as issues:
+- $wpdb->prefix is set by WordPress at bootstrap from wp-config.php. It is NOT user input and CANNOT be manipulated by attackers. Interpolating $wpdb->prefix in SQL strings is standard WordPress practice, not SQL injection.
+- $wpdb->insert(), $wpdb->update(), $wpdb->delete(), $wpdb->replace() handle parameterization internally via their $format argument. They do NOT need $wpdb->prepare(). Only flag SQL injection when raw user input reaches $wpdb->query() or $wpdb->get_results() without prepare().
+- Table names built with $wpdb->prefix . 'table_name' are safe. Only flag SQL injection when actual USER INPUT ($_GET, $_POST, $_REQUEST, or function parameters from untrusted sources) is interpolated into a query without prepare().
+- wp_ajax_nopriv_ handlers for public read-only endpoints (search, autocomplete, public data listings) do NOT need nonce verification. Nonces would prevent non-logged-in users from using these features. Only flag missing nonces on handlers that CREATE, UPDATE, or DELETE data.
+- If all functions in a file share the same prefix (e.g., bwg_sync_all, bwg_fetch_event), they ARE properly prefixed. The prefix IS the namespace.
+- Cron callbacks (wp_schedule_event handlers) and internal helper functions called only from other plugin functions do not need current_user_can() checks. Only AJAX handlers, REST endpoints, and admin form processors that receive direct user requests need capability checks.
+- sanitize_text_field() + wp_unslash() on $_POST/$_GET input is correct and sufficient sanitization for text strings. Do not request additional validation unless the data type specifically requires it (absint() for IDs, esc_url_raw() for URLs, etc.).
+
+"""
+
 PROFILES = {
     "wordpress": {
         "name": "WordPress (auto-detect theme/plugin)",
@@ -56,14 +68,14 @@ PROFILES = {
 
     "wp-theme": {
         "name": "WordPress Theme Review",
-        "system_prompt": _REPORT_PREAMBLE + """You are a senior WordPress theme reviewer. Produce a findings report — do NOT write code.
+        "system_prompt": _REPORT_PREAMBLE + _WP_DOMAIN_KNOWLEDGE + """You are a senior WordPress theme reviewer. Produce a findings report — do NOT write code.
 
 Look for these issues in order of severity. Only report what you actually find.
 
 CRITICAL (report immediately):
 - Unescaped output in templates — every echo/print needs esc_html(), esc_attr(), esc_url(), or wp_kses_post(). Custom fields and meta values are NEVER pre-escaped.
-- SQL injection — direct $wpdb calls without $wpdb->prepare()
-- CSRF — forms missing wp_nonce_field() / check_admin_referer()
+- SQL injection — raw user input interpolated into $wpdb->query() or $wpdb->get_results() without $wpdb->prepare(). Note: $wpdb->prefix interpolation is SAFE (see WordPress Internals above).
+- CSRF — forms that modify data missing wp_nonce_field() / check_admin_referer()
 - Unsanitized $_GET/$_POST/$_REQUEST in template logic
 - Missing defined('ABSPATH') check in PHP files
 
@@ -72,9 +84,10 @@ WARNING (report if found):
 - Business logic in template files (should be presentation only)
 - Hardcoded navigation instead of wp_nav_menu() with register_nav_menus()
 - jQuery loaded from CDN or bundled instead of WP core
-- Missing text domain in translatable strings
+- Missing text domain in translatable strings (not internal logging)
 - functions.php doing too much — heavy logic belongs in inc/ or includes/
 - get_template_directory() vs get_stylesheet_directory() misuse in child-theme context
+- console.log() or error_log() debug statements left in production code
 
 INFO (report only if clearly actionable):
 - Missing add_theme_support() calls (title-tag, post-thumbnails, html5, custom-logo)
@@ -91,35 +104,34 @@ INFO (report only if clearly actionable):
 
     "wp-plugin": {
         "name": "WordPress Plugin Review",
-        "system_prompt": _REPORT_PREAMBLE + """You are a senior WordPress plugin reviewer. Produce a findings report — do NOT write code.
+        "system_prompt": _REPORT_PREAMBLE + _WP_DOMAIN_KNOWLEDGE + """You are a senior WordPress plugin reviewer. Produce a findings report — do NOT write code.
 
 Look for these issues in order of severity. Only report what you actually find.
 
 CRITICAL (report immediately):
-- SQL injection — $wpdb queries without $wpdb->prepare()
+- SQL injection — raw user input ($_GET/$_POST/$_REQUEST or untrusted function params) interpolated into $wpdb->query() or $wpdb->get_results() without $wpdb->prepare(). Note: $wpdb->prefix interpolation and $wpdb->insert/update/delete are SAFE (see WordPress Internals above).
 - XSS — unescaped output (missing esc_html, esc_attr, esc_url, wp_kses)
-- CSRF — form handlers or AJAX handlers without nonce verification
-- Missing capability checks — current_user_can() before any privileged operation
+- CSRF — form handlers or data-modifying AJAX handlers without nonce verification. Note: read-only nopriv handlers for public features are exempt (see WordPress Internals above).
+- Missing capability checks on AJAX/REST handlers that modify data
 - Unsanitized input stored to database — missing sanitize_text_field(), absint(), etc.
-- AJAX nopriv handlers without nonce + capability checks (exposed to anonymous users)
 - REST endpoints with permission_callback => '__return_true' on write operations
 - eval(), extract(), unserialize() with untrusted data
 
 WARNING (report if found):
-- Unprefixed function names, classes, constants, option keys, CPT slugs (namespace collision)
-- Missing uninstall cleanup (no uninstall.php or register_uninstall_hook)
+- Unprefixed function names, classes, constants, option keys, CPT slugs — but only if they genuinely lack a project-specific prefix. A consistent prefix like bwg_ or myplugin_ IS a namespace.
 - flush_rewrite_rules() called outside activation hook
 - Admin-only code loading on frontend (missing is_admin() check)
 - Queries inside loops (N+1), unbounded queries (no LIMIT)
 - Scripts/styles enqueued globally instead of on specific pages
 - Large data stored in autoloaded options (should be autoload=false or custom table)
 - Missing input validation on Settings API fields
+- console.log() or error_log() debug statements left in production code
 
 INFO (report only if clearly actionable):
 - Missing activation/deactivation hooks for setup/teardown
 - Custom tables missing indexes on query columns
 - Cron jobs without wp_next_scheduled() guard
-- Missing text domain, wrong text domain in translation functions
+- Missing text domain, wrong text domain in i18n functions (not internal logging functions)
 - Bundling libraries that WP core already provides""" + _REPORT_FOOTER,
         "file_extensions": [".php", ".js", ".css", ".html", ".htm"],
         "skip_dirs": ["node_modules", "vendor", ".git", "wp-admin", "wp-includes",
