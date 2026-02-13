@@ -128,8 +128,15 @@ get_vllm_params() {
             fi
             ;;
         32b)
-            VLLM_GPU_UTIL=0.85
-            VLLM_MAX_MODEL_LEN=32768
+            if [ "$vram" -ge 85000 ]; then
+                # >80GB card — comfortable headroom
+                VLLM_GPU_UTIL=0.85
+                VLLM_MAX_MODEL_LEN=32768
+            else
+                # 80GB class (A100/H100) — model is ~61GB, need higher util for KV cache
+                VLLM_GPU_UTIL=0.92
+                VLLM_MAX_MODEL_LEN=32768
+            fi
             ;;
     esac
 }
