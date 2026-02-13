@@ -214,7 +214,10 @@ def run_phpstan(repo: str, level: int = 5) -> AnalyzerResult:
 
         # Collect all findings
         all_lines = []
-        for fp, fd in data.get("files", {}).items():
+        files = data.get("files") or {}
+        if not isinstance(files, dict):
+            files = {}
+        for fp, fd in files.items():
             rp = os.path.relpath(fp, repo)
             for m in fd.get("messages", []):
                 all_lines.append(f"  {rp}:{m.get('line', '?')} — {m.get('message', '')}")
@@ -325,7 +328,10 @@ def run_phpcs(repo: str, standard: str = "WordPress") -> AnalyzerResult:
         errs, warns = t.get("errors", 0), t.get("warnings", 0)
         n = errs + warns
         lines = []
-        for fp, fd in data.get("files", {}).items():
+        files = data.get("files") or {}
+        if not isinstance(files, dict):
+            files = {}
+        for fp, fd in files.items():
             rp = os.path.relpath(fp, repo)
             for m in fd.get("messages", []):
                 lvl = "ERROR" if m.get("type") == "ERROR" else "WARN"
