@@ -333,7 +333,12 @@ When you run `./serve.sh`, it detects your GPU and shows an interactive menu:
 
 Press Enter for the recommended model, or pick a number. The model downloads on first use and stays on your network volume for future sessions.
 
-**Non-interactive mode:** `./serve.sh --model 32b-awq` skips the menu. Useful for scripts or when you know what you want.
+**Non-interactive mode:** Pass `--model` to skip the menu. Works with both `start.sh` and `serve.sh`:
+```bash
+bash start.sh --model 32b       # setup + tools + full-precision 32B (80GB+ GPU)
+bash start.sh --model 32b-awq   # setup + tools + quantized 32B (24GB+ GPU)
+bash start.sh --model 7b        # setup + tools + 7B (24GB+ GPU)
+```
 
 ## Cost Estimates
 
