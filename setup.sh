@@ -15,6 +15,45 @@ if [ ! -d "/workspace" ]; then
     exit 1
 fi
 
+# ---- Check PyTorch / CUDA versions ----
+echo ""
+echo "[0/4] Checking container environment..."
+
+TORCH_VER=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "none")
+CUDA_VER=$(python -c "import torch; print(torch.version.cuda or 'none')" 2>/dev/null || echo "none")
+
+echo "  PyTorch: $TORCH_VER"
+echo "  CUDA:    $CUDA_VER"
+
+# vLLM requires PyTorch 2.6+. Older containers (e.g. pytorch:2.4.0) will produce
+# cryptic "CUDA unknown error" at serve time because pip-installed vLLM conflicts
+# with the container's CUDA toolkit.
+TORCH_MAJOR=$(echo "$TORCH_VER" | cut -d. -f1)
+TORCH_MINOR=$(echo "$TORCH_VER" | cut -d. -f2)
+
+if [ "$TORCH_VER" = "none" ]; then
+    echo ""
+    echo "  WARNING: No PyTorch found. vLLM install will pull one in."
+    echo "  If you hit CUDA errors at serve time, use a newer RunPod template."
+    echo ""
+    echo "  Recommended: runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+    echo ""
+elif [ "$TORCH_MAJOR" -lt 2 ] || ([ "$TORCH_MAJOR" -eq 2 ] && [ "$TORCH_MINOR" -lt 6 ]); then
+    echo ""
+    echo "  ERROR: PyTorch $TORCH_VER is too old. vLLM needs PyTorch 2.6+."
+    echo ""
+    echo "  This container's PyTorch and CUDA toolkit won't work with current vLLM."
+    echo "  pip-installing vLLM on top will create version conflicts that produce"
+    echo "  cryptic 'CUDA unknown error' messages at serve time."
+    echo ""
+    echo "  Fix: Start a new pod with a newer template:"
+    echo "    runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+    echo ""
+    exit 1
+else
+    echo "  ✓ PyTorch $TORCH_VER is compatible"
+fi
+
 # ---- Python dependencies ----
 echo ""
 echo "[1/4] Installing Python dependencies..."

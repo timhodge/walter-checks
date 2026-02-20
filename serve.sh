@@ -200,6 +200,44 @@ echo ""
 echo "  GPU: $GPU_NAME (${GPU_MEM} MB)"
 
 # ============================================================
+# Verify CUDA runtime (not just nvidia-smi driver)
+# RunPod pods sometimes need a few seconds for CUDA to be ready
+# ============================================================
+
+echo "  Checking CUDA runtime..."
+
+CUDA_OK=false
+for attempt in 1 2 3 4 5; do
+    if python -c "import torch; torch.cuda.init(); print(f'  CUDA ready: {torch.cuda.get_device_name(0)}')" 2>/dev/null; then
+        CUDA_OK=true
+        break
+    fi
+    echo "  CUDA not ready yet (attempt $attempt/5), waiting 5s..."
+    sleep 5
+done
+
+if ! $CUDA_OK; then
+    echo ""
+    echo "  CUDA runtime failed to initialize after 25s."
+    echo "  nvidia-smi sees the GPU but torch.cuda cannot access it."
+    echo ""
+    echo "  Possible fixes:"
+    echo "    1. Stop the pod and start a new one (most common fix)"
+    echo "    2. Check CUDA_VISIBLE_DEVICES is not set incorrectly"
+    echo "    3. Try a different GPU type or datacenter"
+    echo ""
+    echo "  Debug info:"
+    python -c "
+import torch
+print(f'    torch version: {torch.__version__}')
+print(f'    CUDA available: {torch.cuda.is_available()}')
+print(f'    CUDA compiled: {torch.version.cuda}')
+print(f'    Device count: {torch.cuda.device_count()}')
+" 2>&1 | sed 's/^/  /'
+    exit 1
+fi
+
+# ============================================================
 # Block Blackwell GPUs
 # ============================================================
 

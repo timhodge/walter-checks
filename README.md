@@ -64,7 +64,7 @@ RunPod Pod (GPU)
 
 ### 2. Launch a Pod
 - GPU: See [Compatible GPUs](#compatible-gpus) below — pick based on model quality/cost tradeoff
-- Template: RunPod PyTorch (any CUDA-enabled template)
+- Template: **`runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`** (PyTorch 2.8.0, CUDA 12.8.1). Older templates (e.g. `pytorch:2.4.0`) ship PyTorch versions that are too old for current vLLM and will fail with CUDA errors.
 - Attach your network volume → mounts at `/workspace`
 
 ### 3. Clone and Start
@@ -347,6 +347,9 @@ Press Enter for the recommended model, or pick a number. The model downloads on 
 Plus ~$3.50/mo for 50GB network volume storage.
 
 ## Troubleshooting
+
+**"CUDA unknown error" / "Setting the available devices to be zero"**
+→ Usually a PyTorch/CUDA version mismatch. The container's PyTorch is too old for the vLLM version being installed. Use template `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404` (PyTorch 2.8+). `setup.sh` checks for this and will block with a clear message if PyTorch is too old.
 
 **"CUDA error: unsupported toolchain"**
 → You're on a Blackwell GPU. Switch to Ada/Ampere (see table above).
