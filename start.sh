@@ -32,4 +32,4 @@ echo "    ./getrepo.sh <owner/repo>"
 echo "    python qa-bot/review.py repo repos/<name> -p wordpress"
 echo ""
 
-"$SCRIPT_DIR/serve.sh"
+"$SCRIPT_DIR/serve.sh" "$@"
